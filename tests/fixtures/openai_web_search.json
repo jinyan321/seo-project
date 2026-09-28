@@ -1,0 +1,29 @@
+{
+  "_note": "Hand-built from the documented Responses API shape. Replace with a recorded response after the first real run.",
+  "id": "resp_fixture_1",
+  "object": "response",
+  "status": "completed",
+  "error": null,
+  "model": "gpt-5",
+  "output": [
+    {"type": "reasoning", "id": "rs_1", "summary": []},
+    {"type": "web_search_call", "id": "ws_1", "status": "completed",
+     "action": {"type": "search", "query": "HR software Malaysia", "sources": [
+       {"type": "url", "url": "https://www.capterra.com.my/directory/hr"},
+       {"type": "url", "url": "https://swingvy.com/my/"}
+     ]}},
+    {"type": "web_search_call", "id": "ws_2", "status": "completed",
+     "action": {"type": "search", "query": "Mochi HRMS pricing", "sources": [
+       {"type": "url", "url": "https://www.capterra.com.my/directory/hr"}
+     ]}},
+    {"type": "message", "id": "msg_1", "role": "assistant", "status": "completed", "content": [
+      {"type": "output_text",
+       "text": "Popular choices include Swingvy and BrioHR. Payroll Panda is budget friendly.",
+       "annotations": [
+         {"type": "url_citation", "url": "https://swingvy.com/my/?utm_source=openai", "title": "Swingvy", "start_index": 25, "end_index": 32},
+         {"type": "url_citation", "url": "https://www.capterra.com.my/directory/hr?utm_source=openai", "title": "Capterra", "start_index": 37, "end_index": 43}
+       ]}
+    ]}
+  ],
+  "usage": {"input_tokens": 3100, "output_tokens": 620, "total_tokens": 3720}
+}

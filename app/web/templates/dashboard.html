@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% macro pct(x) %}{{ "%.0f%%"|format(x * 100) if x is not none else "–" }}{% endmacro %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+{% set sm = data.summary %}
+<form method="get" action="/dashboard" style="margin-bottom:16px">
+  <select name="brand" onchange="this.form.submit()">
+    {% for b in brands %}<option {{ "selected" if b == data.brand }}>{{ b }}</option>{% endfor %}
+  </select>
+  <select name="bucket" onchange="this.form.submit()">
+    <option value="week" {{ "selected" if bucket == "week" }}>By week</option>
+    <option value="day" {{ "selected" if bucket == "day" }}>By day</option>
+  </select>
+  {% if latest %}<span class="muted">Latest batch {{ latest.date }}: {{ latest.status }},
+    {{ latest.runs }} runs, ${{ "%.2f"|format(latest.cost_usd) }}</span>{% endif %}
+</form>
+
+<div class="tiles">
+  <div class="card tile"><div class="muted">Mention rate</div><div class="v">{{ pct(sm.mention_rate) }}</div>
+    <div class="muted">{% if sm.ci95 %}95% range {{ pct(sm.ci95[0]) }}–{{ pct(sm.ci95[1]) }}{% endif %} · {{ sm.runs }} answers</div></div>
+  <div class="card tile"><div class="muted">Trend</div>
+    <div class="v">{% if sm.trend %}{{ "%+.0f"|format(sm.trend.delta * 100) }} pts{% else %}–{% endif %}</div>
+    <div class="muted">{% if sm.trend %}{{ sm.trend.from }} → {{ sm.trend.to }}{% endif %}</div></div>
+  <div class="card tile"><div class="muted">Avg rank when named</div><div class="v">{{ sm.avg_rank_when_mentioned or "–" }}</div>
+    <div class="muted">named first {{ pct(sm.top1_rate) }}</div></div>
+  <div class="card tile"><div class="muted">Own site cited</div><div class="v">{{ pct(sm.own_domain_cited_rate) }}</div>
+    <div class="muted">sample agreement {{ pct(sm.sample_agreement) }}</div></div>
+</div>
+
+<div class="card">
+  <strong>Mention rate over time</strong> <span class="muted">shaded = 95% range</span>
+  <div style="position:relative;height:300px"><canvas id="chart"></canvas></div>
+</div>
+
+<div class="card">
+  <strong>By prompt</strong>
+  <table>
+    <tr><th>Prompt</th><th>Rate</th><th>95% range</th><th>Answers</th><th>Avg rank</th></tr>
+    {% for p in sm.by_prompt %}
+    <tr class="{{ 'stopped' if p.status != 'active' }}"><td><a href="/answers/{{ p.prompt_id }}">{{ p.slug }} v{{ p.version }}</a><div class="muted">{{ p.text }}</div></td>
+      <td>{{ pct(p.mention_rate) }}</td>
+      <td>{% if p.ci95 %}{{ pct(p.ci95[0]) }}–{{ pct(p.ci95[1]) }}{% endif %}</td>
+      <td>{{ p.runs }}</td><td>{{ p.avg_rank or "–" }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="tiles" style="grid-template-columns:repeat(auto-fit, minmax(300px, 1fr))">
+  <div class="card"><strong>Share of voice</strong>
+    <table>{% for b in sm.share_of_voice %}
+      <tr><td>{{ "▶ " if b.is_own }}{{ b.brand }}</td><td>{{ pct(b.share) }}</td>
+          <td class="muted">in {{ pct(b.mention_rate) }} of answers</td></tr>{% endfor %}</table></div>
+  <div class="card"><strong>By AI</strong>
+    <table>{% for name, p in sm.by_provider.items() %}
+      <tr><td>{{ name }}</td><td>{{ pct(p.mention_rate) }}</td><td class="muted">{{ p.runs }} answers</td></tr>{% endfor %}</table>
+    <p class="muted">Sentiment: {% for k, v in sm.sentiment.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}</p></div>
+</div>
+
+<div class="tiles" style="grid-template-columns:repeat(auto-fit, minmax(300px, 1fr))">
+  <div class="card"><strong>Most-cited sources</strong>
+    <table>{% for d in sm.top_cited_domains %}<tr><td>{{ d.domain }}</td><td>{{ d.runs }}</td></tr>{% endfor %}</table></div>
+  <div class="card"><strong>Gap report</strong> <span class="muted">cited with competitors, not with {{ gaps.brand }}</span>
+    <table>{% for g in gaps.gaps %}<tr><td>{{ g.domain }}</td><td>+{{ g.gap }}</td>
+      <td class="muted">{{ g.competitors[:3]|join(", ") }}</td></tr>{% endfor %}</table></div>
+</div>
+
+<div class="card"><strong>Latest mentions</strong>
+  <table>{% for sn in sm.latest_snippets %}
+    <tr><td class="muted">{{ sn.date }}<br>{{ sn.provider }} · {{ sn.prompt }}</td>
+        <td>{{ sn.snippet }}</td><td class="muted">#{{ sn.rank }} {{ sn.sentiment or "" }}</td></tr>{% endfor %}</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const series = {{ data.series | tojson }};
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim();
+  const muted = css.getPropertyValue('--muted').trim();
+  const line = css.getPropertyValue('--line').trim();
+  const pc = v => v == null ? null : Math.round(v * 1000) / 10;
+  new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels: series.map(p => p.period),
+      datasets: [
+        { label: 'low', data: series.map(p => p.ci95 ? pc(p.ci95[0]) : null),
+          borderWidth: 0, pointRadius: 0, fill: false },
+        { label: 'high', data: series.map(p => p.ci95 ? pc(p.ci95[1]) : null),
+          borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: accent + '22' },
+        { label: 'Mention rate', data: series.map(p => pc(p.mention_rate)),
+          borderColor: accent, backgroundColor: accent, borderWidth: 2, pointRadius: 3, tension: 0.2 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { filter: i => i.datasetIndex === 2,
+          callbacks: { label: i => { const p = series[i.dataIndex];
+            return `${pc(p.mention_rate)}% (${p.mentioned}/${p.runs})`; } } } },
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: v => v + '%', color: muted }, grid: { color: line } },
+        x: { ticks: { color: muted }, grid: { display: false } },
+      },
+    },
+  });
+</script>
+{% endblock %}

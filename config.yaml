@@ -1,0 +1,81 @@
+# Brands, models, schedule and cost settings.
+# Prompts live in the database. `seed_prompts` is loaded only when the prompts table is empty.
+# After editing brands or aliases, run: python -m app.cli reextract  (no API cost)
+
+brand:
+  name: Kakitangan
+  aliases: []            # "Kakitangan.com" already matches: the name is followed by "."
+  domains: [kakitangan.com]   # needed for own_domain_cited_rate
+  # "kakitangan" is also the Malay word for "staff", so only the capitalised brand name counts.
+  case_sensitive: true
+  description: a Malaysian HR, payroll, leave and claims software   # used in the strategy prompt
+
+competitors:
+  - {name: Talenox,      aliases: [],               domains: [talenox.com]}
+  - {name: Swingvy,      aliases: [],               domains: [swingvy.com]}
+  - {name: PayrollPanda, aliases: [Payroll Panda],  domains: [payrollpanda.my]}
+  - {name: BrioHR,       aliases: [Brio HR],        domains: [briohr.com]}
+  - {name: HReasily,     aliases: [],               domains: [hreasily.com]}
+  - {name: Info-Tech,    aliases: [Infotech],       domains: [info-tech.com.my]}
+  - {name: Deskera,      aliases: [],               domains: [deskera.com]}
+
+providers:
+  anthropic:
+    model: claude-sonnet-5
+    web_search_tool: web_search_20260209
+    max_tokens: 8000
+    max_searches: 5
+  openai:
+    model: gpt-5
+
+location:
+  country: MY
+  city: Kuala Lumpur
+  region: Kuala Lumpur
+  timezone: Asia/Kuala_Lumpur
+
+samples_per_prompt: 1    # answers per prompt per AI per day. 1 = lowest cost (10 calls/day);
+                         # 3 = tighter margins and a sample-agreement score, at 3x the cost
+concurrency: 4
+sdk_max_retries: 4       # SDKs retry 408/409/429/5xx and connection errors with backoff
+request_timeout_s: 300
+
+schedule:
+  hour: 9
+  minute: 7
+  timezone: Asia/Kuala_Lumpur
+  catch_up_on_start: true  # worker runs today's batch at startup if it was missed
+
+sentiment:
+  enabled: true
+  model: claude-haiku-4-5
+
+# Per-prompt strategy written by an LLM from the stored answers (worker only).
+# Weekly for every prompt, plus on demand from the Strategy tab's "Generate now" button.
+strategy:
+  enabled: true
+  model: claude-opus-5
+  window_days: 7         # answers from the last N days feed each strategy
+  weekday: mon
+  hour: 10               # schedule timezone
+  max_tokens: 8000
+  estimate_usd: 0.25     # cost guard estimate per strategy
+
+# USD per 1M tokens, plus USD per web search call. Check against current price pages.
+prices:
+  claude-opus-5:    {input: 5.00, output: 25.00}
+  claude-sonnet-5:  {input: 2.00, output: 10.00}
+  claude-haiku-4-5: {input: 1.00, output: 5.00}
+  gpt-5:            {input: 1.25, output: 10.00}
+search_fee_usd:
+  anthropic: 0.01
+  openai: 0.01
+  fake: 0.0
+estimate_per_call_usd: 0.08  # used by the cost guard before a call's real cost is known
+
+seed_prompts:
+  - {slug: best-sme,       intent: category,   text: "What is the best HR software for SMEs in Malaysia?"}
+  - {slug: statutory,      intent: compliance, text: "Recommend a payroll and HRMS system in Malaysia that handles EPF, SOCSO, EIS and PCB correctly."}
+  - {slug: compare-50,     intent: comparison, text: "Compare HR management systems for a 50-person company in Malaysia."}
+  - {slug: claims-mobile,  intent: features,   text: "Which HR software in Malaysia has leave, claims and attendance in one mobile app?"}
+  - {slug: budget-startup, intent: price,      text: "What are affordable HRMS options for a startup in Kuala Lumpur, and roughly how much do they cost?"}

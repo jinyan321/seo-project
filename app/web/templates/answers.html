@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block title %}AI Answers · {{ p.prompt.slug }}{% endblock %}
+
+{% macro url(pid=None, d=None, prov=None, smp=None, cmp=None, t=None) -%}
+/answers/{{ pid or p.prompt.id }}?date={{ d or p.day }}&provider={{ prov or p.provider }}&sample={{ p.sample if smp is none else smp }}{% if (compare if cmp is none else cmp) %}&compare=1{% endif %}&tab={{ t or tab }}
+{%- endmacro %}
+
+{% block content %}
+<style>
+  .ans-head { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  .ans-head h2 { margin:0; flex:1 1 320px; font-size:20px; }
+  .pager { display:flex; gap:6px; align-items:center; white-space:nowrap; }
+  .pager a { border:1px solid var(--line); border-radius:6px; padding:2px 10px; color:var(--ink); text-decoration:none; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:12px 0 0; flex-wrap:wrap; }
+  .tabs a { padding:8px 12px; color:var(--muted); text-decoration:none; border-bottom:2px solid transparent; }
+  .tabs a.on { color:var(--ink); border-bottom-color:var(--accent); }
+  .ans-grid { display:grid; grid-template-columns:240px minmax(0,1fr); gap:16px; margin-top:16px; }
+  @media (max-width:760px) { .ans-grid { grid-template-columns:minmax(0,1fr); } }
+  .side h4 { margin:16px 0 6px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .side a.plat { display:flex; gap:8px; align-items:center; padding:8px; border-radius:6px; color:var(--ink); text-decoration:none; }
+  .side a.plat.on { background:var(--bg); border:1px solid var(--line); }
+  .side a.plat .meta { margin-left:auto; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--line); flex:none; }
+  .dot.yes { background:var(--own); }
+  .samples { display:flex; gap:6px; }
+  .samples a { flex:1; text-align:center; padding:4px; border:1px solid var(--line); border-radius:6px; color:var(--ink); text-decoration:none; font-size:13px; }
+  .samples a.on { border-color:var(--accent); font-weight:600; }
+  .find { width:100%; }
+  .cols { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); }
+  .plat-title { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .plat-title h3 { margin:0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
+  .chip { display:inline-flex; gap:6px; align-items:center; padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px; }
+  .chip.own { border-color:var(--own); color:var(--own); font-weight:600; }
+  .chip.comp b { color:var(--comp); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+  .badge.yes { border-color:var(--own); color:var(--own); }
+  .answer { line-height:1.6; overflow-wrap:anywhere; }
+  .answer table { display:block; overflow-x:auto; }
+  .answer a { color:var(--accent); }
+  mark { background:transparent; color:inherit; border-radius:3px; padding:0 2px; }
+  mark.own { background:var(--own-bg); color:var(--own); font-weight:600; }
+  mark.comp { background:var(--comp-bg); }
+  mark.find { background:#ffd54a; color:#1d1d1b; }
+  .sources li { margin:4px 0; overflow-wrap:anywhere; }
+  .errbox { color:var(--bad); border:1px solid var(--line); border-radius:6px; padding:12px; }
+  .legend div { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--muted); margin:4px 0; }
+  .sw { width:12px; height:12px; border-radius:3px; }
+  .strategy h3 { margin:20px 0 6px; }
+  .st-head { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top:16px; }
+  .badge.pr-high { border-color:var(--bad); color:var(--bad); }
+  .badge.pr-medium { border-color:var(--comp); color:var(--comp); }
+  button[disabled] { opacity:.6; cursor:default; }
+  @media (max-width:760px) {
+    table.actions tr:first-child { display:none; }
+    table.actions, table.actions tbody, table.actions tr, table.actions td { display:block; width:auto; }
+    table.actions tr { border-bottom:1px solid var(--line); padding:10px 0; }
+    table.actions td { border:0; padding:2px 0; }
+  }
+</style>
+
+<div class="card">
+  <div class="ans-head">
+    <h2>{{ p.prompt.text }}</h2>
+    <div class="pager">
+      <a href="{{ url(pid=p.prev_id, d='', prov='', smp=0) }}" title="Previous prompt">‹</a>
+      <span class="muted">{{ p.position }} / {{ p.total }}</span>
+      <a href="{{ url(pid=p.next_id, d='', prov='', smp=0) }}" title="Next prompt">›</a>
+    </div>
+  </div>
+  <div class="muted">{{ p.prompt.slug }} v{{ p.prompt.version }}{% if p.prompt.status != "active" %} · stopped{% endif %}
+    · answers and sources from each AI</div>
+
+  <div class="tabs">
+    <a class="{{ 'on' if tab == 'answer' }}" href="{{ url(t='answer') }}">AI Answers</a>
+    <a class="{{ 'on' if tab == 'strategy' }}" href="{{ url(t='strategy') }}">Strategy</a>
+    <a class="{{ 'on' if tab == 'history' }}" href="{{ url(t='history') }}">History</a>
+    <form method="get" action="/answers/{{ p.prompt.id }}" style="margin-left:auto">
+      <input type="hidden" name="provider" value="{{ p.provider }}">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      {% if compare %}<input type="hidden" name="compare" value="1">{% endif %}
+      <select name="date" onchange="this.form.submit()" aria-label="Day">
+        {% for d in p.days %}<option value="{{ d }}" {{ "selected" if d == p.day }}>{{ d }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+
+  {% if tab == "history" %}
+  <div style="margin-top:16px; overflow-x:auto">
+    <table>
+      <tr><th>Day</th>{% for prov in hist_providers %}<th>{{ label(prov) }}</th>{% endfor %}</tr>
+      {% for row in hist_rows %}
+      <tr><td><a href="{{ url(d=row.day, t='answer') }}">{{ row.day }}</a></td>
+        {% for prov in hist_providers %}{% set c = row.cells.get(prov) %}
+        <td>{% if c %}<span class="dot {{ 'yes' if c[0] }}" style="display:inline-block"></span>
+            named in {{ c[0] }}/{{ c[1] }}{% if c[2] %} · best #{{ c[2] }}{% endif %}{% else %}–{% endif %}</td>
+        {% endfor %}</tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% elif tab == "strategy" %}
+  {% macro pct(x) %}{{ "%.0f%%"|format(x * 100) if x is not none else "–" }}{% endmacro %}
+  <div class="strategy">
+    <div class="st-head">
+      <div class="muted">
+        {% if st and st.status == "ok" %}Generated {{ synced(st.finished_at or st.created_at) }} MYT
+          from {{ st.runs_used }} answers ({{ st.window_start }} → {{ st.window_end }}) · {{ st.model }}
+          · ${{ "%.2f"|format(st.cost_usd) }}{% else %}Written by an AI from the stored answers.
+          Refreshed every week, or on demand.{% endif %}
+      </div>
+      <form method="post" action="/answers/{{ p.prompt.id }}/strategy">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" {{ "disabled" if queued }}>{{ "Writing…" if queued else "Generate now" }}</button>
+      </form>
+    </div>
+    {% if queued %}<p class="flash">A new strategy is being written{% if queued.requested_by %}
+      (requested by {{ queued.requested_by }}){% endif %}. Refresh in a minute.</p>{% endif %}
+
+    {% if not st %}
+    <p class="muted">No strategy yet for this question. Click <b>Generate now</b>, or wait for the weekly run.</p>
+    {% elif st.status == "error" %}
+    <p class="errbox">The last strategy could not be written: {{ st.error }}</p>
+    {% else %}
+    {% set o = st.output %}{% set ev = st.evidence %}
+    {% set gapd = ev.gap_domains|map(attribute="domain")|list %}
+    <div class="tiles" style="margin-top:12px">
+      <div class="card tile"><div class="muted">Named in</div><div class="v">{{ pct(ev.own.mention_rate) }}</div>
+        <div class="muted">{% if ev.own.ci95 %}95% range {{ pct(ev.own.ci95[0]) }}–{{ pct(ev.own.ci95[1]) }}{% endif %} · {{ ev.window.answers }} answers</div></div>
+      <div class="card tile"><div class="muted">Avg rank when named</div><div class="v">{{ ev.own.avg_rank_when_named or "–" }}</div>
+        <div class="muted">named first {{ pct(ev.own.named_first_rate) }}</div></div>
+      <div class="card tile"><div class="muted">Competitors named</div><div class="v">{{ ev.competitors|length }}</div>
+        <div class="muted">{{ ev.competitors[:3]|map(attribute="brand")|join(", ") }}</div></div>
+    </div>
+
+    <h3>Where you stand</h3>
+    <p>{{ o.summary }}</p>
+
+    <h3>What to do</h3>
+    <div style="overflow-x:auto"><table class="actions">
+      <tr><th>Priority</th><th>Action</th><th>Target</th><th>Why</th><th>Evidence</th></tr>
+      {% for level in ["high", "medium", "low"] %}{% for a in o.actions if a.priority == level %}
+      <tr><td><span class="badge pr-{{ a.priority }}">{{ a.priority }}</span></td>
+        <td><b>{{ a.title }}</b><div class="muted">{{ a.type }}</div></td>
+        <td>{% if a.target in gapd %}<a href="https://{{ a.target }}" target="_blank" rel="nofollow noopener noreferrer">{{ a.target }}</a>{% else %}{{ a.target }}{% endif %}</td>
+        <td>{{ a.why }}</td><td class="muted">{{ a.evidence }}</td></tr>
+      {% endfor %}{% endfor %}
+    </table></div>
+
+    {% if o.why_competitors_win %}
+    <h3>Why competitors get picked</h3>
+    <div class="cols">
+      {% for c in o.why_competitors_win %}
+      <div class="card" style="margin:0"><b style="color:var(--comp)">{{ c.brand }}</b>
+        <p style="margin:6px 0">{{ c.reason }}</p><div class="muted">{{ c.evidence }}</div></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <p><b>Watch next week:</b> {{ o.watch }}</p>
+
+    <details><summary class="muted">Evidence the AI was given</summary>
+      <h4>Cited with competitors, not with {{ ev.own_brand }}</h4>
+      <table>{% for g in ev.gap_domains %}<tr><td>{{ g.domain }}</td><td>+{{ g.gap }}</td>
+        <td class="muted">{{ g.competitors[:3]|join(", ") }}</td></tr>{% else %}<tr><td class="muted">None</td></tr>{% endfor %}</table>
+      <h4>Competitors in these answers</h4>
+      <table>{% for c in ev.competitors %}<tr><td>{{ c.brand }}</td><td>{{ pct(c.mention_rate) }}</td>
+        <td class="muted">avg rank {{ c.avg_rank }}</td></tr>{% endfor %}</table>
+      <h4>Own pages found but not cited</h4>
+      {% if ev.own_pages_found_not_cited %}<ul class="sources">{% for u in ev.own_pages_found_not_cited %}<li>{{ u }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">None{% if not ev.own.own_site_cited_rate and ev.own.own_site_cited_rate != 0 %} (set brand.domains in config.yaml to track this){% endif %}</p>{% endif %}
+    </details>
+    {% endif %}
+
+    {% set older = strategies|rejectattr("status", "in", ["pending", "running"])|list %}
+    {% if older|length > 1 %}
+    <h4 class="muted">Earlier strategies</h4>
+    <ul>{% for o2 in older %}<li><a href="{{ url(t='strategy') }}&sid={{ o2.id }}">{{ synced(o2.finished_at or o2.created_at) }}</a>
+      <span class="muted">{{ o2.status }}{% if o2.requested_by %} · {{ o2.requested_by }}{% endif %}</span>
+      {% if st and o2.id == st.id %}<b>(shown)</b>{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="ans-grid">
+    <aside class="side">
+      <input class="find" id="find" type="search" placeholder="Find in answers..." aria-label="Find in answers">
+      <div class="muted" id="find-count"></div>
+
+      <h4>AI platforms</h4>
+      {% for it in p.sidebar %}
+      <a class="plat {{ 'on' if it.provider == p.provider and not compare }}" href="{{ url(prov=it.provider, cmp=false) }}">
+        <span class="dot {{ 'yes' if it.named }}"></span>{{ it.label }}
+        <span class="meta">{{ it.named }}/{{ it.ok }}{% if it.best_rank %} · #{{ it.best_rank }}{% endif %}</span>
+      </a>
+      {% endfor %}
+      {% if p.sidebar|length > 1 %}
+      <a class="plat {{ 'on' if compare }}" href="{{ url(cmp=not compare) }}">⇄ {{ "Stop comparing" if compare else "Compare side by side" }}</a>
+      {% endif %}
+
+      {% if p.samples|length > 1 %}
+      <h4>Sample</h4>
+      <div class="samples">
+        {% set cur = (p.sidebar|selectattr("provider", "equalto", p.provider)|first) %}
+        {% for idx in p.samples %}{% set named = cur.samples.get(idx) %}
+        <a class="{{ 'on' if idx == p.sample }}" href="{{ url(smp=idx) }}"
+           title="{{ 'error' if named is none else ('names ' ~ own_brand if named else 'does not name ' ~ own_brand) }}">
+          {{ idx + 1 }} {{ "!" if named is none else ("✓" if named else "✗") }}</a>
+        {% endfor %}
+      </div>
+      <p class="muted">This question was asked {{ p.samples|length }} times that day, because answers vary.</p>
+      {% endif %}
+
+      <h4>Indicators</h4>
+      <div class="legend">
+        <div><span class="sw" style="background:var(--own)"></span>{{ own_brand }} (you)</div>
+        <div><span class="sw" style="background:var(--comp)"></span>Competitors</div>
+        <div><span class="dot yes"></span>Named that day (k/3 samples · best rank)</div>
+      </div>
+    </aside>
+
+    <section class="cols">
+      {% for sh in p.shown %}
+      <article>
+        <div class="plat-title">
+          <h3>{{ sh.label }}</h3>
+          <span class="muted">Synced: {{ synced(sh.run.created_at) }} MYT · sample {{ sh.run.sample_idx + 1 }}</span>
+          {% if sh.run.status == "ok" %}
+          <span class="badge {{ 'yes' if sh.own }}">{% if sh.own %}Mentioned #{{ sh.own.rank_list or sh.own.rank_first }}{% else %}Not mentioned{% endif %}</span>
+          {% endif %}
+        </div>
+
+        {% if sh.run.status != "ok" %}
+        <p class="errbox">This call failed ({{ sh.run.status }}) and is left out of the scores.<br>
+          <span class="muted">{{ sh.run.error }}</span></p>
+        {% else %}
+        <h4 class="muted" style="margin:14px 0 0">Brands mentioned</h4>
+        <div class="chips">
+          {% for m in sh.mentions %}
+          <span class="chip {{ 'own' if m.is_own else 'comp' }}"><b>#{{ m.rank_list or m.rank_first }}</b>{{ m.brand }}{% if m.count > 1 %} <span class="muted">×{{ m.count }}</span>{% endif %}</span>
+          {% else %}<span class="muted">No tracked brands named.</span>{% endfor %}
+        </div>
+
+        <h4 class="muted" style="margin:14px 0 0">Answer</h4>
+        <div class="answer">{{ render_answer(sh.run.answer_text) }}</div>
+
+        <h4 class="muted">Sources cited ({{ sh.cited|length }})</h4>
+        <ol class="sources">
+          {% for c in sh.cited %}<li><a href="{{ c.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ c.domain }}</a> <span class="muted">{{ c.url }}</span></li>
+          {% else %}<li class="muted" style="list-style:none">None</li>{% endfor %}
+        </ol>
+        {% if sh.retrieved %}
+        <details><summary class="muted">Found by search but not used ({{ sh.retrieved|length }})</summary>
+          <ul class="sources">{% for c in sh.retrieved %}<li><a href="{{ c.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ c.domain }}</a> <span class="muted">{{ c.url }}</span></li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+        {% endif %}
+      </article>
+      {% endfor %}
+    </section>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(() => {
+  const terms = {{ brand_terms | tojson }};
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const answers = [...document.querySelectorAll(".answer")];
+
+  // Wrap regex matches in text nodes with <mark>. DOM methods only, never innerHTML.
+  function wrap(root, re, classFor, skip) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    let hits = 0;
+    for (const node of nodes) {
+      if (node.parentElement.closest(skip)) continue;
+      const text = node.nodeValue;
+      re.lastIndex = 0;
+      let m, last = 0;
+      const frag = document.createDocumentFragment();
+      while ((m = re.exec(text)) !== null) {
+        if (m[0] === "") { re.lastIndex++; continue; }
+        frag.append(text.slice(last, m.index));
+        const mark = document.createElement("mark");
+        mark.className = classFor(m[0]);
+        mark.textContent = m[0];
+        frag.append(mark);
+        last = m.index + m[0].length;
+        hits++;
+      }
+      if (last === 0) continue;
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+    return hits;
+  }
+
+  // Brand highlighting: whole names, longest first (same rule as the extractor).
+  const sorted = [...terms].sort((a, b) => b.name.length - a.name.length);
+  const own = new Set(terms.filter(t => t.own).map(t => t.name.toLowerCase().replace(/\s+/g, " ")));
+  // Same rule as the extractor: case-sensitive brands (names that are also ordinary words)
+  // only match their exact capitalisation.
+  for (const cs of [true, false]) {
+    const group = sorted.filter(t => !!t.cs === cs);
+    if (!group.length) continue;
+    const re = new RegExp("(?<![\\w-])(?:" + group.map(t => esc(t.name).replace(/\\? /g, "\\s+")).join("|") + ")(?![\\w-])", cs ? "g" : "gi");
+    answers.forEach(a => wrap(a, re, s => own.has(s.toLowerCase().replace(/\s+/g, " ")) ? "own" : "comp", "mark"));
+  }
+
+  // Find in answers.
+  const input = document.getElementById("find"), count = document.getElementById("find-count");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    document.querySelectorAll("mark.find").forEach(mk => {
+      const parent = mk.parentNode;
+      mk.replaceWith(document.createTextNode(mk.textContent));
+      parent.normalize();
+    });
+    const q = input.value.trim();
+    if (!q) { count.textContent = ""; return; }
+    let hits = 0;
+    const re = new RegExp(esc(q), "gi");
+    answers.forEach(a => hits += wrap(a, re, () => "find", "mark.find"));
+    count.textContent = hits ? `${hits} match${hits > 1 ? "es" : ""}` : "No matches";
+    const first = document.querySelector("mark.find");
+    if (first) first.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+})();
+</script>
+{% endblock %}

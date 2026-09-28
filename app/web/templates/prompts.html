@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Prompts{% endblock %}
+{% block content %}
+<h2>Prompts</h2>
+<p class="muted">Editing a prompt stops the current version and starts a new one, so trends never mix
+two different questions. Changes apply from the next daily run.</p>
+
+{% for slug, versions in groups.items() %}
+<div class="card">
+  {% set cur = versions[0] %}
+  <strong>{{ slug }}</strong>
+  <span class="muted">{{ cur.intent or "" }} · {{ versions|length }} version(s)</span>
+  {% if cur.status == "active" %}
+  <form method="post" action="/admin/prompts/{{ cur.id }}/edit">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p><textarea name="text" rows="2" required>{{ cur.text }}</textarea></p>
+    <button type="submit">Save as v{{ cur.version + 1 }}</button>
+    <button class="secondary" type="submit" formaction="/admin/prompts/{{ cur.id }}/stop"
+            formnovalidate onclick="return confirm('Stop asking this prompt? History is kept.')">Stop</button>
+  </form>
+  {% endif %}
+  <table style="margin-top:12px">
+    <tr><th>Version</th><th>Status</th><th>Text</th><th>Created</th><th>Stopped</th></tr>
+    {% for p in versions %}
+    <tr class="{{ 'stopped' if p.status != 'active' }}">
+      <td>v{{ p.version }} <span class="muted">#{{ p.id }}</span></td>
+      <td>{{ p.status }}</td><td>{{ p.text }}</td>
+      <td class="muted">{{ p.created_at.strftime('%Y-%m-%d') }} {{ p.created_by or "" }}</td>
+      <td class="muted">{{ p.stopped_at.strftime('%Y-%m-%d') if p.stopped_at else "" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3>Add a prompt</h3>
+  <form method="post" action="/admin/prompts">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p><input name="slug" placeholder="slug, e.g. best-sme" required pattern="[a-z0-9][a-z0-9-]*">
+       <input name="intent" placeholder="intent (optional)"></p>
+    <p><textarea name="text" rows="2" placeholder="The buyer question, as a buyer would ask it" required></textarea></p>
+    <button type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

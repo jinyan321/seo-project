@@ -1,0 +1,31 @@
+{
+  "_note": "Hand-built from the documented Messages API shape. Replace with a recorded response after the first real run.",
+  "responses": [
+    {
+      "id": "msg_fixture_1",
+      "type": "message",
+      "role": "assistant",
+      "model": "claude-sonnet-5",
+      "stop_reason": "end_turn",
+      "content": [
+        {"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search",
+         "input": {"query": "best HR software SME Malaysia"}},
+        {"type": "web_search_tool_result", "tool_use_id": "srvtoolu_1", "content": [
+          {"type": "web_search_result", "url": "https://www.g2.com/categories/hr?utm_source=x", "title": "G2 HR", "encrypted_content": "..."},
+          {"type": "web_search_result", "url": "https://talenox.com/", "title": "Talenox", "encrypted_content": "..."},
+          {"type": "web_search_result", "url": "https://www.reddit.com/r/malaysia/comments/abc", "title": "Reddit", "encrypted_content": "..."}
+        ]},
+        {"type": "text", "text": "Here are strong options for Malaysian SMEs:\n\n1. **Talenox** - payroll with EPF, SOCSO and PCB built in.",
+         "citations": [
+           {"type": "web_search_result_location", "url": "https://talenox.com/", "title": "Talenox", "cited_text": "Talenox payroll", "encrypted_index": "..."}
+         ]},
+        {"type": "text", "text": "\n2. **Mochi HRMS** - leave, claims and attendance in one mobile app.\n3. Kakitangan.com - popular with startups.",
+         "citations": [
+           {"type": "web_search_result_location", "url": "https://www.g2.com/categories/hr?utm_source=x", "title": "G2 HR", "cited_text": "Mochi HRMS", "encrypted_index": "..."}
+         ]},
+        {"type": "text", "text": "\n\nSee also https://www.hrmasia.com/guide."}
+      ],
+      "usage": {"input_tokens": 5200, "output_tokens": 410, "server_tool_use": {"web_search_requests": 1}}
+    }
+  ]
+}
